@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ## \[4.0.5\] - unreleased
 
+### Add
+
+- Tasks get a `PUEUE_TASK_ID` environment variable with their own task id.
+
 ### Fix
 
 - Minor bug where the daemon secret and certificate were world readable for a split second during first startup and initialization.

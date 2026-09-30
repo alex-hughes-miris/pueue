@@ -155,6 +155,7 @@ pub fn spawn_process(settings: &Settings, state: &mut LockedState, task_id: usiz
     // Determine the worker's id depending on the current group.
     // Inject that info into the environment.
     let worker_id = state.children.get_next_group_worker(&group);
+    envs.insert("PUEUE_TASK_ID".into(), task_id.to_string());
     envs.insert("PUEUE_GROUP".into(), group.clone());
     envs.insert("PUEUE_WORKER_ID".into(), worker_id.to_string());
 

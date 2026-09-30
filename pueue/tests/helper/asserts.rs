@@ -90,6 +90,11 @@ pub async fn assert_worker_envs(
     let task = state.tasks.get(&task_id).unwrap();
     // Make sure the environment variables have been properly set.
     assert_eq!(
+        task.envs.get("PUEUE_TASK_ID"),
+        Some(&task_id.to_string()),
+        "Task id hasn't been correctly set for task {task_id}",
+    );
+    assert_eq!(
         task.envs.get("PUEUE_GROUP"),
         Some(&group.to_string()),
         "Worker group didn't match for task {task_id}",
@@ -123,6 +128,10 @@ pub async fn assert_worker_envs(
 
     let stdout = log.output.clone().unwrap();
     let output = String::from_utf8_lossy(&stdout);
+    assert!(
+        output.contains(&format!("TASK_ID: {task_id}")),
+        "Output should contain task id {task_id}. Got: {output}",
+    );
     assert!(
         output.contains(&format!("WORKER_ID: {worker}")),
         "Output should contain worker id {worker} for task {task_id}. Got: {output}",
