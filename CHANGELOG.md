@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - `daemon.graceful_kill_timeout` setting. When set, `pueue kill` sends `SIGTERM` first and only sends `SIGKILL` once the timeout runs out. Killing a task again kills it right away.
 - Tasks that were still running when the daemon died get their callback on the next daemon start, with result `Killed`.
 - On shutdown, the daemon waits for running callbacks before it exits.
+- `daemon.keep_running_on_restore` setting. Groups listed there aren't paused on daemon start, even if they have queued tasks.
 
 ### Fix
 

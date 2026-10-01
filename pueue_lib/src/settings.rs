@@ -176,6 +176,10 @@ pub struct Daemon {
     /// Killing a task again while it's waiting sends `SIGKILL` right away.
     #[serde(default = "Default::default")]
     pub graceful_kill_timeout: Option<u64>,
+    /// When the daemon starts, groups with queued tasks are paused to prevent unwanted execution
+    /// after a crash. Groups listed here are left as they were instead.
+    #[serde(default = "Default::default")]
+    pub keep_running_on_restore: Vec<String>,
 }
 
 impl Default for Shared {
@@ -229,6 +233,7 @@ impl Default for Daemon {
             shell_command: None,
             env_vars: HashMap::new(),
             graceful_kill_timeout: None,
+            keep_running_on_restore: Vec::new(),
         }
     }
 }

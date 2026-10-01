@@ -190,6 +190,17 @@ async fn daemon_with_graceful_kill(timeout: u64) -> Result<PueueDaemon> {
     daemon_with_settings(settings, tempdir).await
 }
 
+/// Wait until the task has set up its signal handling and printed `ready`.
+async fn wait_until_ready(shared: &pueue_lib::settings::Shared, task_id: usize) -> Result<()> {
+    for _ in 0..100 {
+        if get_task_log(shared, task_id, None).await?.contains("ready") {
+            return Ok(());
+        }
+        sleep_ms(50).await;
+    }
+    bail!("Task {task_id} didn't get ready")
+}
+
 fn kill_request(task_id: usize) -> KillRequest {
     KillRequest {
         tasks: TaskSelection::TaskIds(vec![task_id]),
@@ -207,17 +218,11 @@ async fn test_graceful_kill() -> Result<()> {
     assert_success(
         add_and_start_task(
             shared,
-            "trap 'echo got sigterm; exit 3' TERM; sleep 60 & wait",
+            "trap 'echo got sigterm; exit 3' TERM; echo ready; sleep 60 & wait",
         )
         .await?,
     );
-    assert_task_condition(
-        shared,
-        0,
-        Task::is_running,
-        "Task should start immediately.",
-    )
-    .await?;
+    wait_until_ready(shared, 0).await?;
 
     send_request(shared, kill_request(0)).await?;
     wait_for_task_condition(shared, 0, is_killed).await?;
@@ -237,14 +242,8 @@ async fn test_graceful_kill_timeout() -> Result<()> {
     let daemon = daemon_with_graceful_kill(2).await?;
     let shared = &daemon.settings.shared;
 
-    assert_success(add_and_start_task(shared, "trap '' TERM; sleep 60").await?);
-    assert_task_condition(
-        shared,
-        0,
-        Task::is_running,
-        "Task should start immediately.",
-    )
-    .await?;
+    assert_success(add_and_start_task(shared, "trap '' TERM; echo ready; sleep 60").await?);
+    wait_until_ready(shared, 0).await?;
 
     send_request(shared, kill_request(0)).await?;
     sleep_ms(1000).await;
@@ -264,14 +263,8 @@ async fn test_graceful_kill_twice() -> Result<()> {
     let daemon = daemon_with_graceful_kill(60).await?;
     let shared = &daemon.settings.shared;
 
-    assert_success(add_and_start_task(shared, "trap '' TERM; sleep 60").await?);
-    assert_task_condition(
-        shared,
-        0,
-        Task::is_running,
-        "Task should start immediately.",
-    )
-    .await?;
+    assert_success(add_and_start_task(shared, "trap '' TERM; echo ready; sleep 60").await?);
+    wait_until_ready(shared, 0).await?;
 
     send_request(shared, kill_request(0)).await?;
     sleep_ms(500).await;

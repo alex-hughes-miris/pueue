@@ -378,7 +378,12 @@ impl InternalState {
 
             // If there are any queued tasks, pause the group.
             // This should prevent any unwanted execution of tasks due to a system crash.
-            if let TaskStatus::Queued { .. } = task.status {
+            if let TaskStatus::Queued { .. } = task.status
+                && !settings
+                    .daemon
+                    .keep_running_on_restore
+                    .contains(&task.group)
+            {
                 info!(
                     "Pausing group {} to prevent unwanted execution of previous tasks",
                     &task.group
