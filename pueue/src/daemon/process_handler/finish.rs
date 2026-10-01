@@ -36,6 +36,7 @@ pub fn handle_finished_tasks(settings: &Settings, state: &mut LockedState) {
         // Handle std::io errors on child processes.
         // I have never seen something like this, but it might happen.
         if let Some(error) = error {
+            state.pending_kills.remove(task_id);
             let (_taks_id, _child) = state
                 .children
                 .0
@@ -87,8 +88,11 @@ pub fn handle_finished_tasks(settings: &Settings, state: &mut LockedState) {
 
         // Processes with exit code 0 exited successfully
         // Processes with `None` have been killed by a Signal
+        // Gracefully killed processes may handle the SIGTERM and exit with any code.
+        let killed = state.pending_kills.remove(task_id).is_some();
         let result = match exit_code {
             Some(0) => TaskResult::Success,
+            Some(_) if killed => TaskResult::Killed,
             Some(exit_code) => TaskResult::Failed(exit_code),
             None => TaskResult::Killed,
         };

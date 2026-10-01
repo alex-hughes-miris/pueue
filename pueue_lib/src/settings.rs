@@ -171,6 +171,11 @@ pub struct Daemon {
     /// ];
     /// ```
     pub shell_command: Option<Vec<String>>,
+    /// If set, killing a task first sends `SIGTERM` to its process group and only sends
+    /// `SIGKILL` if the task is still running after this many seconds.
+    /// Killing a task again while it's waiting sends `SIGKILL` right away.
+    #[serde(default = "Default::default")]
+    pub graceful_kill_timeout: Option<u64>,
 }
 
 impl Default for Shared {
@@ -223,6 +228,7 @@ impl Default for Daemon {
             compress_state_file: false,
             shell_command: None,
             env_vars: HashMap::new(),
+            graceful_kill_timeout: None,
         }
     }
 }

@@ -9,7 +9,9 @@ use crate::{
         internal_state::{SharedState, children::Children, state::LockedState},
         network::socket::socket_cleanup,
         pid::cleanup_pid_file,
-        process_handler::{finish::handle_finished_tasks, spawn::spawn_new},
+        process_handler::{
+            finish::handle_finished_tasks, kill::escalate_pending_kills, spawn::spawn_new,
+        },
     },
     internal_prelude::*,
     ok_or_shutdown,
@@ -36,6 +38,14 @@ pub async fn run(state: SharedState, settings: Settings) -> Result<()> {
             pools.insert(group.clone(), BTreeMap::new());
         }
         state.children = Children(pools);
+
+        // Fire the callbacks of tasks that were still running when the previous daemon went
+        // away, so they get a chance to clean up after them.
+        for task_id in std::mem::take(&mut state.interrupted_tasks) {
+            if let Some(task) = state.tasks().get(&task_id).cloned() {
+                spawn_callback(&settings, &mut state, &task);
+            }
+        }
     }
 
     loop {
@@ -44,6 +54,7 @@ pub async fn run(state: SharedState, settings: Settings) -> Result<()> {
 
             check_callbacks(&mut state);
             handle_finished_tasks(&settings, &mut state);
+            escalate_pending_kills(&mut state);
 
             // Check if we're in shutdown.
             // If all tasks are killed, we do some cleanup and exit.
@@ -68,7 +79,8 @@ pub async fn run(state: SharedState, settings: Settings) -> Result<()> {
 /// Once they're, we do some cleanup and exit.
 fn handle_shutdown(settings: &Settings, state: &mut LockedState) {
     // There are still active tasks. Continue waiting until they're killed and cleaned up.
-    if state.children.has_active_tasks() {
+    // Also wait for their callbacks, since they may need to clean up after the tasks.
+    if state.children.has_active_tasks() || !state.callbacks.is_empty() {
         return;
     }
 

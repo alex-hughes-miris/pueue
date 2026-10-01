@@ -64,7 +64,9 @@ pub async fn add_task_to_group<C: ToString, G: ToString>(
 /// Mini wrapper around add_task, which creates a task that echos PUEUE's worker environment
 /// variables to `stdout`.
 pub async fn add_env_task(shared: &Shared, command: &str) -> Result<Response> {
-    let command = format!("echo TASK_ID: $PUEUE_TASK_ID; echo WORKER_ID: $PUEUE_WORKER_ID; echo GROUP: $PUEUE_GROUP; {command}");
+    let command = format!(
+        "echo TASK_ID: $PUEUE_TASK_ID; echo WORKER_ID: $PUEUE_WORKER_ID; echo GROUP: $PUEUE_GROUP; {command}"
+    );
     add_task(shared, &command).await
 }
 
@@ -74,6 +76,8 @@ pub async fn add_env_task_to_group(
     command: &str,
     group: &str,
 ) -> Result<Response> {
-    let command = format!("echo TASK_ID: $PUEUE_TASK_ID; echo WORKER_ID: $PUEUE_WORKER_ID; echo GROUP: $PUEUE_GROUP; {command}");
+    let command = format!(
+        "echo TASK_ID: $PUEUE_TASK_ID; echo WORKER_ID: $PUEUE_WORKER_ID; echo GROUP: $PUEUE_GROUP; {command}"
+    );
     add_task_to_group(shared, &command, group).await
 }

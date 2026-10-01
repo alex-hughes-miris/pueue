@@ -1,9 +1,10 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashMap},
     fs::{File, read_to_string},
     io::{Read, Write},
     process::Child,
     sync::{Arc, Mutex, MutexGuard},
+    time::Instant,
 };
 
 use chrono::Local;
@@ -63,6 +64,16 @@ pub struct InternalState {
     /// These are the currently running callbacks. They're usually very short-lived.
     #[serde(default, skip)]
     pub callbacks: Vec<Child>,
+    /// Tasks that got a `SIGTERM` from a graceful kill, mapped to the time at which they'll get
+    /// a `SIGKILL` if they're still running. `None` once the `SIGKILL` has been sent.
+    /// This is runtime state and won't be serialised to disk.
+    #[serde(default, skip)]
+    pub pending_kills: HashMap<usize, Option<Instant>>,
+    /// Tasks that were still running when the previous daemon went away.
+    /// Their callbacks are fired once the task handler starts.
+    /// This is runtime state and won't be serialised to disk.
+    #[serde(default, skip)]
+    pub interrupted_tasks: Vec<usize>,
 }
 
 // Implement a custom Clone, as the child processes don't implement Clone.
@@ -340,6 +351,7 @@ impl InternalState {
                     enqueued_at,
                     result: TaskResult::Killed,
                 };
+                state.interrupted_tasks.push(task.id);
             }
 
             // Handle crash during editing of the task command.

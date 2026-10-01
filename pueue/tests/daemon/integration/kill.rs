@@ -170,3 +170,115 @@ async fn test_kill_tasks_without_pause(#[case] kill_message: KillRequest) -> Res
 
     Ok(())
 }
+
+fn is_killed(task: &Task) -> bool {
+    matches!(
+        task.status,
+        TaskStatus::Done {
+            result: TaskResult::Killed,
+            ..
+        }
+    )
+}
+
+async fn daemon_with_graceful_kill(timeout: u64) -> Result<PueueDaemon> {
+    let (mut settings, tempdir) = daemon_base_setup()?;
+    settings.daemon.graceful_kill_timeout = Some(timeout);
+    settings
+        .save(&Some(tempdir.path().join("pueue.yml")))
+        .context("Couldn't write pueue config to temporary directory")?;
+    daemon_with_settings(settings, tempdir).await
+}
+
+fn kill_request(task_id: usize) -> KillRequest {
+    KillRequest {
+        tasks: TaskSelection::TaskIds(vec![task_id]),
+        signal: None,
+    }
+}
+
+/// With a graceful kill timeout, the task gets a SIGTERM it can handle.
+/// It counts as killed, even though it exits with a non-zero code by itself.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_graceful_kill() -> Result<()> {
+    let daemon = daemon_with_graceful_kill(60).await?;
+    let shared = &daemon.settings.shared;
+
+    assert_success(
+        add_and_start_task(
+            shared,
+            "trap 'echo got sigterm; exit 3' TERM; sleep 60 & wait",
+        )
+        .await?,
+    );
+    assert_task_condition(
+        shared,
+        0,
+        Task::is_running,
+        "Task should start immediately.",
+    )
+    .await?;
+
+    send_request(shared, kill_request(0)).await?;
+    wait_for_task_condition(shared, 0, is_killed).await?;
+
+    let log = get_task_log(shared, 0, None).await?;
+    assert!(
+        log.contains("got sigterm"),
+        "Task should handle SIGTERM. Got: {log}"
+    );
+
+    Ok(())
+}
+
+/// A task that ignores the SIGTERM is killed once the timeout runs out.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_graceful_kill_timeout() -> Result<()> {
+    let daemon = daemon_with_graceful_kill(2).await?;
+    let shared = &daemon.settings.shared;
+
+    assert_success(add_and_start_task(shared, "trap '' TERM; sleep 60").await?);
+    assert_task_condition(
+        shared,
+        0,
+        Task::is_running,
+        "Task should start immediately.",
+    )
+    .await?;
+
+    send_request(shared, kill_request(0)).await?;
+    sleep_ms(1000).await;
+    assert!(
+        get_task(shared, 0).await?.is_running(),
+        "Task should ignore the SIGTERM until the timeout runs out."
+    );
+
+    wait_for_task_condition(shared, 0, is_killed).await?;
+
+    Ok(())
+}
+
+/// Killing a task again while it waits for its timeout kills it right away.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn test_graceful_kill_twice() -> Result<()> {
+    let daemon = daemon_with_graceful_kill(60).await?;
+    let shared = &daemon.settings.shared;
+
+    assert_success(add_and_start_task(shared, "trap '' TERM; sleep 60").await?);
+    assert_task_condition(
+        shared,
+        0,
+        Task::is_running,
+        "Task should start immediately.",
+    )
+    .await?;
+
+    send_request(shared, kill_request(0)).await?;
+    sleep_ms(500).await;
+    assert!(get_task(shared, 0).await?.is_running());
+
+    send_request(shared, kill_request(0)).await?;
+    wait_for_task_condition(shared, 0, is_killed).await?;
+
+    Ok(())
+}
